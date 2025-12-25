@@ -18,6 +18,7 @@ analysis workflow used in the accompanying manuscript.
 GameTalker/
 ├── main.R                 # Core model implementation
 ├── example_inference.R    # Minimal reproducible example
+├── Triple-culture.xls
 ├── README.md
 ```
 
