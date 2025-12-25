@@ -1,17 +1,32 @@
+############################################################
+# GameTalker: Core Method Implementation
+#
+# This file implements the GameTalker framework, including:
+#   1. intrinsic growth model
+#   2. Interaction ODE definitions (pairwise & higher-order)
+#   3. Time-varying interaction functions
+#   4. Numerical ODE solvers (RK4)
+#   5. Parameter inference utilities
+#
+############################################################
 
+
+############################################################
+# 1. Intrinsic growth model (baseline dynamics)
+############################################################
 LC_get_mu1 <- function(par,times){
   
   par[1]/(1+((par[1]-1)/1)*exp(-par[2]*times))
 }
 
-
 sumle1 <- function(parin,times,z){
   sum((z-LC_get_mu1(par=parin,times=times))^2)
 }
 
-
-rr <- optim_BFGS.ind(par.curve,max.loop=5,z=as.numeric(p1),times=Times)
-
+s.mle <- function(s.par,s.y,s.t){
+  A <- sum((s.y - com.get_mu(s.par,s.t))^2 )
+  A
+}
 
 optim_BFGS.ind<-function (par.curve,max.loop=5,...)
 {
@@ -62,69 +77,35 @@ optim_BFGS.ind<-function (par.curve,max.loop=5,...)
 }
 
 
-
-s.mle <- function(s.par,s.y,s.t){
-  A <- sum((s.y - com.get_mu(s.par,s.t))^2 )
-  A
+############################################################
+# 2. Interaction ODE definitions
+############################################################
+#parin <- c(0.2,2,0.3,1,0,1)
+ODE.G <- function(parin,X){
+  parin[1]*(1-X/ parin[2])^ parin[3]
 }
 
-com.get_mu <- function(par, times)
-{
-  par0 <- par;
-  if (class(par0)!="list")
-  {
-    par0 <- list(
-      a1 = par[1],
-      k1 = par[2],
-      r1 = par[3],
-      beta12 = par[4],
-      lambda12 = par[5],
-      beta13 = par[6],
-      lambda13 = par[7],
-      a2 = par[8],
-      k2 = par[9],
-      r2 = par[10],
-      beta21 = par[11],
-      lambda21 = par[12],
-      beta23 = par[13],
-      lambda23 = par[14],
-      a3 = par[15],
-      k3 = par[16],
-      r3 = par[17],
-      beta31 = par[18],
-      lambda31 = par[19],
-      beta32 = par[20],
-      lambda32 = par[21]);
-  }
-  
-  state0 <- c(X=1, Y=1,Z=1);
-  y <- COMP.f( par0, state0, times );
-  
-  #if (class(y)=="try-error" )
-  #  return(rep(NaN, length(times)*2));
-  index.time <- 1:length(times)
-  return ( c(y[index.time, 2:4] ) );
+ODE.G12 <- function(parin,X,Y){
+  parin[1]*(1-X/ parin[2])^ parin[3] + parin[4]*Y^ parin[5]
 }
 
-COMP.f <-function( parameters, state, times ){
-  Lorenz<-function(t, state, parameters) 
-  {
-    with( as.list(c(state, parameters)),
-          {
-            dX <- a1*(1-X/k1)^r1 + beta12*Y^lambda12 + beta13*Z^lambda13
-            dY <- a2*(1-Y/k2)^r2 + beta21*X^lambda21 + beta23*Z^lambda23
-            dZ <- a3*(1-Z/k3)^r3 + beta31*X^lambda31 + beta32*Y^lambda32
-            list(c(dX, dY, dZ))
-          }
-          
-    ) # end with(as.list ...
-  }
+ODEABC <- function(para1,A,B,C){
   
-  out <- try(rk(y = state, times = times, func = Lorenz, parms = parameters,method="rk4") );
-  out;
+  para1[1]*(1-A/ para1[2])^ para1[3] + para1[4]*B^para1[5] + para1[6]*C^para1[7]
+  
+}
+
+ODEABC.sum <- function(para1,A,B,C,D){
+  
+  
+  sumA <- sum((D-ODEABC(para1,A,B,C))^2)
+  sumA
 }
 
 
+############################################################
+# 3. Time-varying interaction functions
+############################################################
 Legendre.model <-function( t, mu, tmin=NULL, tmax=NULL )
 {
   u <- -1;
@@ -167,27 +148,69 @@ Legendre.model <-function( t, mu, tmin=NULL, tmax=NULL )
 }
 
 
+############################################################
+# 4. Numerical solvers (Runge–Kutta integration)
+############################################################
+COMP.f <-function( parameters, state, times ){
+  Lorenz<-function(t, state, parameters) 
+  {
+    with( as.list(c(state, parameters)),
+          {
+            dX <- a1*(1-X/k1)^r1 + beta12*Y^lambda12 + beta13*Z^lambda13
+            dY <- a2*(1-Y/k2)^r2 + beta21*X^lambda21 + beta23*Z^lambda23
+            dZ <- a3*(1-Z/k3)^r3 + beta31*X^lambda31 + beta32*Y^lambda32
+            list(c(dX, dY, dZ))
+          }
+          
+    ) # end with(as.list ...
+  }
+  
+  out <- try(rk(y = state, times = times, func = Lorenz, parms = parameters,method="rk4") );
+  out;
+}
 
-ODEABC.sum <- function(para1,A,B,C,D){
+com.get_mu <- function(par, times)
+{
+  par0 <- par;
+  if (class(par0)!="list")
+  {
+    par0 <- list(
+      a1 = par[1],
+      k1 = par[2],
+      r1 = par[3],
+      beta12 = par[4],
+      lambda12 = par[5],
+      beta13 = par[6],
+      lambda13 = par[7],
+      a2 = par[8],
+      k2 = par[9],
+      r2 = par[10],
+      beta21 = par[11],
+      lambda21 = par[12],
+      beta23 = par[13],
+      lambda23 = par[14],
+      a3 = par[15],
+      k3 = par[16],
+      r3 = par[17],
+      beta31 = par[18],
+      lambda31 = par[19],
+      beta32 = par[20],
+      lambda32 = par[21]);
+  }
   
+  state0 <- c(X=1, Y=1,Z=1);
+  y <- COMP.f( par0, state0, times );
   
-  sumA <- sum((D-ODEABC(para1,A,B,C))^2)
-  sumA
+  #if (class(y)=="try-error" )
+  #  return(rep(NaN, length(times)*2));
+  index.time <- 1:length(times)
+  return ( c(y[index.time, 2:4] ) );
 }
 
 
-
-
-
-ODEABC <- function(para1,A,B,C){
-  
-  para1[1]*(1-A/ para1[2])^ para1[3] + para1[4]*B^para1[5] + para1[6]*C^para1[7]
-  
-}
-
-
-
-
+############################################################
+# 5. High-level ODE solvers (GameTalker models)
+############################################################
 ode.sovle1 <- function(para1,para2,para3,times,inter1,inter2,inter3,nstep=100){
   
   stp <- (max(times)-min(times))/nstep
@@ -321,12 +344,4 @@ ode.sovle123 <- function(para1,para2,para3,times,inter1,inter2,inter3,nstep=100)
 
 
 
-#parin <- c(0.2,2,0.3,1,0,1)
-ODE.G <- function(parin,X){
-  parin[1]*(1-X/ parin[2])^ parin[3]
-}
-
-ODE.G12 <- function(parin,X,Y){
-  parin[1]*(1-X/ parin[2])^ parin[3] + parin[4]*Y^ parin[5]
-}
 
